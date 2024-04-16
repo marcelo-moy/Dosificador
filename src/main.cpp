@@ -223,7 +223,7 @@ void setup() {
   pinMode(D2, INPUT_PULLDOWN_16); 
   digitalWrite(D2,HIGH);
   
-/*
+/*.
 //escanear redes cuando no funciona
 Serial.println("Escaneando...");		//Letrero de escaneando
 int n = WiFi.scanNetworks();		//Guardar cantidad de redes en variable n
