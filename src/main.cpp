@@ -213,7 +213,7 @@ void setup() {
   WiFi.disconnect();
   delay(10);
   
-  int cursorPosition=0;
+  //int cursorPosition=0;
   
   lcd.begin(16, 2);
   lcd.print("   Connecting");
