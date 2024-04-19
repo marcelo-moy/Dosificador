@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "Dosificador",
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"random": "cpp"
+		}
+	}
+}
