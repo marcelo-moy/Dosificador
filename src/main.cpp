@@ -48,7 +48,7 @@ A0    | ADC  | | +------| D5  | SCK | GPIO14 |                                  
 
 
 
-*/
+*/.
 
 /*
 #define D0  3 // GPIO3 maps to Ardiuno D0
