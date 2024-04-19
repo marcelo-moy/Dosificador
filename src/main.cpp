@@ -50,7 +50,7 @@ A0    | ADC  | | +------| D5  | SCK | GPIO14 |                                  
 
 */
 
-/*
+/*.
 #define D0  3 // GPIO3 maps to Ardiuno D0
 #define D1 1 // GPIO1 maps to Ardiuno D1
 #define D2 16 // GPIO16 maps to Ardiuno D2
@@ -218,7 +218,7 @@ void setup() {
   lcd.begin(16, 2);
   lcd.print("   Connecting");
  
-  //Teclado recibe por boton
+//Teclado recibe por boton
   //pinMode(D2, INPUT_PULLDOWN_16); 
   pinMode(D2, INPUT_PULLDOWN_16); 
   digitalWrite(D2,HIGH);
