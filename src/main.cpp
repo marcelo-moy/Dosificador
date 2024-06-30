@@ -903,7 +903,134 @@ char Eleccion(char Titulo,char ItemT,char Items,char Tipo){
 }
 */
 void loop() {
+  //web
+  static uint32_t lastTime = 0;
+  static uint32_t lastTimedisplay = 0;
+  static uint32_t lastChangeTime = 0;
+  static uint32_t currTime;
+  static uint32_t multFactor = 0;
+  static uint16_t tiempo_de_pausa=1; //en segundos
+  static uint16_t tiempo_de_marcha=10;
+  volatile static uint8_t marcha=0;
+  volatile static uint8_t contramarcha=0;
+  static uint32_t ftime = 0;
+  String sftime="0";
+  currTime = millis();
+   if (estado == "0") //Empieza con la pausa
+  { 
+    TimerCount=0;
+    marcha=0;
+    contramarcha=0;
+    lastTime = TimerCount;
+    events.send("1","mestado",millis());
+    estado="9";
+  }
+
+  if (estado == "1") //Empieza con la pausa
+  { 
+    estado="2";
+    TimerCount=0;
+    marcha=0;
+    contramarcha=0;
+    lastTime = TimerCount;
+    Serial.print(F("\nTiempo anterior de Pausa [Seg]=")); Serial.println(tiempo_de_pausa);
+    if (tiempo_de_pausa == timerSliderValue1.toInt()){
+      Serial.print(F("\nEs igual a"));
+    }else
+     Serial.print(F("\nNo es lo mismo a"));
+
+    tiempo_de_pausa= timerSliderValue1.toInt();
+    Serial.print(F("\nTiempo de Pausa [Seg]=")); Serial.println(tiempo_de_pausa);
+    
+    Serial.print(F("\nTiempo anterior de Marcha [Seg]=")); Serial.println(tiempo_de_marcha);
+    if (tiempo_de_marcha == timerSliderValue.toInt()){
+      Serial.print(F("\nEs igual a"));
+    }else{
+      Serial.print(F("\nNo es lo mismo a"));
+    }
+    tiempo_de_marcha= timerSliderValue.toInt();
+    Serial.print(F("\nTiempo de Marcha [Seg]=")); Serial.println(tiempo_de_marcha);
+      // hay que grabar de todos modos porque hace falta el estado
+      config.Tmarchag=tiempo_de_marcha;
+      config.Tpausag=tiempo_de_pausa;
+      config.estadog=1;
+      eepromsave();
+      events.send(estado.c_str(),"mestado",millis());
+  }
+
+  if (estado == "2") //Pausa Esperando para marcha
+  { 
+      
+    if (TimerCount - lastTime > tiempo_de_pausa)
+    { 
+      lastTime = TimerCount;
+      estado="3";
+      digitalWrite(output,LOW);
+      marcha=1;
+      events.send(estado.c_str(),"mestado",millis());
+    }
+  }    
+  if (estado == "3") //Marcha Esperando para pausa
+  { 
+    if (TimerCount - lastTime > tiempo_de_marcha)
+    { 
+      lastTime = TimerCount;
+      estado="4";
+      marcha=0;
+      digitalWrite(output,HIGH);
+      digitalWrite(output1,HIGH);
+      contramarcha=0;
+      events.send(estado.c_str(),"mestado",millis());
+    }
+  }    
+  if (estado == "4") //Parado Esperando para contramarcha
+  { 
+    if (TimerCount - lastTime > tiempo_de_pausa)
+    { 
+      lastTime = TimerCount;
+      estado="5";
+      contramarcha=1;
+      digitalWrite(output1,LOW);
+      events.send(estado.c_str(),"mestado",millis());
+    }
+  }    
+  if (estado == "5") //Contramarcha Esperando para pausa
+  { 
+    if (TimerCount - lastTime > tiempo_de_marcha)
+    { 
+      lastTime = TimerCount;
+      estado="2";
+      contramarcha=0;
+      digitalWrite(output1,HIGH);
+      events.send(estado.c_str(),"mestado",millis());
+    }
+  }    
+  if (TimerCount - lastTimedisplay > 1)
+  {
+   lastTimedisplay=TimerCount;
+   if ((estado=="5")||(estado=="3")){
+     ftime= tiempo_de_marcha-(TimerCount-lastTime);
+   } else if ((estado=="2")||(estado=="4")){
+     ftime= tiempo_de_pausa-(TimerCount-lastTime);
+   } else {ftime=0;}
+   if (ftime>tiempo_de_marcha) ftime=tiempo_de_marcha;
+  sftime=String(ftime);
+      events.send(sftime.c_str(),"muestratiempo",millis());
+      
+    Serial.print(F("\n")); Serial.print(TimerCount-lastTime); 
+     Serial.print(F("/")); Serial.print(lastTime); 
+     Serial.print(F("/")); Serial.print(TimerCount); 
+    Serial.print(F(" Est ")); Serial.print(estado); 
+      
+    if (contramarcha==1) Serial.print(F(" <- "));
+    else Serial.print(F("    "));
+    if (marcha==1) Serial.print(F("->"));
+    else Serial.print(F("  "));
+    
+  }
   
+
+  //finweb
    if(counter == 60) //Get new data every 10 minutes
     {
       counter = 0;
