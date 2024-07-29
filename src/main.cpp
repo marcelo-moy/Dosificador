@@ -40,7 +40,7 @@ A0    | ADC  | | +------| D5  | SCK | GPIO14 |                                  
 ------+      | |        +-----+-----+--------+      
       |      | +--------| D4  | SDA | GPIO4  |                                        LCD DB4
 ------+      |          +-----+-----+--------+    
-      |      +----------| D3  | SCL | GPz  |                                        
+      |      +----------| D3  | SCL | GPIO5  |                                        
 ------+                 +-----+-----+--------+    
       |                 | D2  |     | GPIO16 |                                       boton comun                        Hight at boot  used to wake up from deep sleep
 ------+                 +-----+-----+--------+                                
@@ -49,7 +49,7 @@ A0    | ADC  | | +------| D5  | SCK | GPIO14 |                                  
       |  WEMOS D1 R1    | D0  | TX  | GPIO3  |                                                                          Hight at boot 
 ------+-----------------+-----+-----+--------+    
 
-
+WH-061 I2c SCL 000 01234567 fue reformado para conectarse vi
 
 */
 
@@ -82,8 +82,8 @@ A0    | ADC  | | +------| D5  | SCK | GPIO14 |                                  
 //const char *password = "EdgeComputing013";   // Password on network
 //const char *ssid     = "Fibertel Wifi 220 2.4GHZ";      // SSID of local network
 //const char *password = "01411398178";   // Password on network
-const char *ssid     = "papi";      // SSID of local network
-const char *password = "wifipapi";   // Password on network
+const char *ssid     = "EficentoBiocdoc01";      // SSID of local network
+const char *password = "Wifieficento1$";   // Password on network
 
 ///  variables lavadora ver cual usar
 const char* PARAM_INPUT_1 = "state";
@@ -92,6 +92,7 @@ const char* PARAM_INPUT_3 = "value1";
 
 const int output = 0;
 const int output1 = 2;
+int sensorValue = 0;
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
@@ -323,20 +324,52 @@ if (!!window.EventSource) {
 #define TIMER_INTERRUPT_DEBUG         0
 #define _TIMERINTERRUPT_LOGLEVEL_     0
 #include <ESP8266TimerInterrupt.h>
-#define TIMER_INTERVAL_MS        1000   //1000
+#define TIMER_INTERVAL_MS        10   //1000
+
+//volatile uint32_t TimerCount = 0;
+//volatile uint32_t subTimerCount = 0;
+
 volatile uint32_t TimerCount = 0;
-String estado = "1"; //0 apago 1 encendido
+volatile uint subTimerCount = 0;
+volatile uint32_t lastTime = 0;
+volatile uint32_t lastTimedisplay = 0;
+volatile u_char ordenint = 'N';
+
+volatile u_char estado = '1'; //0 apago 1 encendido
 String timerSliderValue = "10";
 String timerSliderValue1 = "1";
 int tempo;
 int tempo1;
+//variables de PCF8574
 
+#define PCF8574_ADDRESS 0x27
+uint8_t data = 0b00000000; // Byte de datos a enviar
+uint8_t antdata = 0b00000000; // Byte de datos a enviar
+
+//variables teclado
+uint8_t tecla;
+uint8_t bufTecla = 0;
+unsigned int RetardoTecla =20;
+unsigned long ContTecla=0;
+int prueba =100;
+unsigned long TiempoAhora = 0;
+uint8_t tbufTecla = 0;
+
+//guardar eemprom
 struct config_t {
     uint8_t estadog;
     uint8_t Tmarchag;
     uint8_t Tpausag;
     uint8_t TTotal;
 } config;
+#define SDA_PIN 4 // Pin SDA (GPIO4)
+#define SCL_PIN 5 // Pin SCL (GPIO5)
+
+//volatile uint8_t i2cState = 0; // Estado del protocolo I2C
+//volatile uint8_t byteToSend = 0b10101010; // Byte a enviar
+//volatile uint8_t bitIndex = 0; // Índice del bit actual
+volatile bool isTransmitting = false; // Bandera para indicar si se está transmitiendo
+//volatile bool addressSent = false; // Bandera para indicar si se envió la dirección
 
 
 void eepromsave() {
@@ -359,26 +392,253 @@ void eeprominit() {
     //Guardo valores por defecto en la eeprom 
     eepromsave(); 
 }
-
+//@@@
 ESP8266Timer ITimer;
-void TimerHandler()
+void IRAM_ATTR TimerHandler()
 {
-  static bool toggle = false;
+  //Original 
+  //static bool toggle = false;
 
   // Flag for checking to be sure ISR is working as Serial.print is not OK here in ISR
-  TimerCount++;
+  //TimerCount++;
 
   //timer interrupt toggles pin LED_BUILTIN
   //digitalWrite(LED_BUILTIN, toggle);
   //digitalWrite(output, toggle);
   
-  toggle = !toggle;
+ // toggle = !toggle;
   //estado=toggle;
   //Serial.print(F("\nEstado=")); Serial.print(estado); 
+  
+  //de la otra interrupcion 
+  
+  //static bool toggle = false;
+  //fin
+  static unsigned int Repetir;
+  uint8_t TeclaAux;// a global para probar
+	volatile static uint8_t TeclaAnt;
+	//static unsigned long ContTecla=0;// a global para probar
+	static uint8_t Nueva;
+  uint8_t d4a;
+  uint8_t d5a;
+  uint8_t d6a;
+  uint8_t d7a;
+  
+  Repetir = RetardoTecla>>3;
+
+  //digitalRead(D2);
+if (!isTransmitting) {
+  d4a = digitalRead(D4);
+  d5a = digitalRead(D5);
+  d6a = digitalRead(D6);
+  d7a = digitalRead(D7);
+  
+  
+  digitalWrite(D4,HIGH);
+  digitalWrite(D5,HIGH);
+  digitalWrite(D6,HIGH);
+  digitalWrite(D7,HIGH);
+  
+  if(digitalRead(D2) == HIGH){
+      pinMode ( D4, INPUT_PULLUP);
+/*
+      //GPF(D4) = GPFFS(GPFFS_GPIO(D4));//Set mode to GPIO
+      GPF(4) = 0;
+      //GPEC = (1 << D4); //Disable
+      GPEC = 16; //Disable
+      
+      //GPC(D4) = (GPC(D4) & (0xF << GPCI)) | (1 << GPCD); //SOURCE(GPIO) | DRIVER(OPEN_DRAIN) | INT_TYPE(UNCHANGED) | WAKEUP_ENABLE(DISABLED)
+      //GPC4 = (GPC4 & (0xF << 7)) | (1 << 2); //SOURCE(GPIO) | DRIVER(OPEN_DRAIN) | INT_TYPE(UNCHANGED) | WAKEUP_ENABLE(DISABLED)
+      GPC4 = (GPC4 & (0xF << 7)) | (1 << 2); 
+      //GPF(D4) |= (1 << GPFPU);
+      GPF(D4) |= (1 << 7);
+*/
+
+
+      //pinMode ( D5, INPUT_PULLUP);
+      GPF(14) = GPFFS(GPFFS_GPIO(14));//Set mode to GPIO
+      GPEC = (1 << 14); //Disable
+      GPC(14) = (GPC(14) & (0xF << GPCI)) | (1 << GPCD); //SOURCE(GPIO) | DRIVER(OPEN_DRAIN) | INT_TYPE(UNCHANGED) | WAKEUP_ENABLE(DISABLED)
+      GPF(14) |= (1 << GPFPU);  // Enable  Pullup
+      
+      //pinMode ( D6, INPUT_PULLUP);
+      GPF(12) = GPFFS(GPFFS_GPIO(14));//Set mode to GPIO
+      GPEC = (1 << 12); //Disable
+      GPC(12) = (GPC(12) & (0xF << GPCI)) | (1 << GPCD); //SOURCE(GPIO) | DRIVER(OPEN_DRAIN) | INT_TYPE(UNCHANGED) | WAKEUP_ENABLE(DISABLED)
+      GPF(12) |= (1 << GPFPU);  // Enable  Pullup
+      //pinMode ( D7, INPUT_PULLUP);
+      GPF(13) = GPFFS(GPFFS_GPIO(14));//Set mode to GPIO
+      GPEC = (1 << 13); //Disable
+      GPC(13) = (GPC(13) & (0xF << GPCI)) | (1 << GPCD); //SOURCE(GPIO) | DRIVER(OPEN_DRAIN) | INT_TYPE(UNCHANGED) | WAKEUP_ENABLE(DISABLED)
+      GPF(13) |= (1 << GPFPU);  // Enable  Pullup
+      
+      //pinMode(D2, OUTPUT); 
+      //GPF(16) = GPFFS(GPFFS_GPIO(16));//Set mode to GPIO
+      //GPC(16) = (GPC(16) & (0xF << GPCI)); //SOURCE(GPIO) | DRIVER(NORMAL) | INT_TYPE(UNCHANGED) | WAKEUP_ENABLE(DISABLED)
+      //GPES = (1 << 16); //Enable
+      GPF16 = GP16FFS(GPFFS_GPIO(16));//Set mode to GPIO
+      GPC16 = 0;
+      GP16E |= 1;
+      
+        
+      digitalWrite(D2,LOW);
+          
+      TeclaAux=!digitalRead(D4)+(!digitalRead(D5)<<1)+(!digitalRead(D6)<<2)+(!digitalRead(D7)<<3);
+      //tecla=TeclaAux;
+      pinMode(D2, INPUT_PULLDOWN_16); 
+      pinMode ( D4, OUTPUT);
+      pinMode ( D5, OUTPUT);
+      pinMode ( D6, OUTPUT);
+      pinMode ( D7, OUTPUT);
+
+  }else TeclaAux=0;
+  if(TeclaAnt==TeclaAux)
+  {
+      if(ContTecla<(RetardoTecla+Repetir)){
+        ContTecla++;
+      }
+  }
+  else{
+      ContTecla = RetardoTecla+1;
+      Nueva=1;
+  }
+  TeclaAnt=TeclaAux;
+  if(ContTecla==(RetardoTecla+Repetir)){
+    ContTecla = RetardoTecla;
+    
+  }
+  if(ContTecla==RetardoTecla)
+  {
+    if ((TeclaAux=='*')||(TeclaAux=='#')){
+      if (Nueva==0) TeclaAux=0;
+    }
+    if (Nueva==1) {
+      ContTecla=0;
+      Nueva=0;
+    }
+    tecla=TeclaAux;
+    bufTecla=tecla;
+  }else  tecla=0;
+  
+
+}
+
+
+
+ 
+ 
+  
+
+  //parar que sea el mismo intervalo
+  //ESP.wdtFeed();
+  /*
+  if (estado == "1") {
+      lastTime = TimerCount;
+  }
+  if (estado == "2") {
+      if (TimerCount - lastTime > tiempo_de_pausa)
+      {
+        lastTime = TimerCount;
+      }
+
+  }
+  if (estado == "3") //Marcha Esperando para pausa
+    { 
+      lastTime = TimerCount;
+
+  }
+  */
+ //i2c a mano
+ /*
+  if (isTransmitting) {
+   switch (i2cState) {
+    case 0: // Start Condition
+      pinMode ( D4, OUTPUT);
+      pinMode ( D3, OUTPUT);
+      digitalWrite(SDA_PIN, HIGH); // SDA pasa a bajo mientras SCL está alto
+      digitalWrite(SCL_PIN, HIGH); // SCL alto para transmitir el bit
+      delayMicroseconds(10); // Breve espera para estabilizar
+      digitalWrite(SDA_PIN, LOW); // SDA pasa a bajo mientras SCL está alto
+      delayMicroseconds(10); // Breve espera para estabilizar
+//pruebA
+    
+     i2cState++;
+     
+    break;
+    case 1: // Enviar Dirección
+      if (bitIndex < 8) {
+        digitalWrite(SDA_PIN, (PCF8574_ADDRESS & (1 << (7 - bitIndex))) ? HIGH : LOW); // Configura el bit actual en SDA
+        digitalWrite(SCL_PIN, HIGH); // SCL alto para transmitir el bit
+        delayMicroseconds(10); // Breve espera para estabilizar
+        digitalWrite(SCL_PIN, LOW); // SCL bajo
+         delayMicroseconds(10); // Breve espera para estabilizar
+
+
+          
+        bitIndex++;
+      } else {
+        bitIndex = 0; // Reinicia el índice del bit
+        i2cState++;
+       
+       //  toggle = !toggle;
+        // digitalWrite(SCL_PIN, toggle);
+   i2cState=6;
+     isTransmitting = false; // Marcar la transmisión como completada
+      }
+    break;
+    case 2: // Transmitir Bit por Bit
+      if (bitIndex < 8) {
+        digitalWrite(SDA_PIN, (byteToSend & (1 << (7 - bitIndex))) ? HIGH : LOW); // Configura el bit actual en SDA
+        digitalWrite(SCL_PIN, HIGH); // SCL alto para transmitir el bit
+        delayMicroseconds(10); // Breve espera para estabilizar
+        digitalWrite(SCL_PIN, LOW); // SCL bajo
+         delayMicroseconds(10); // Breve espera para estabilizar
+        bitIndex++;
+      } else {
+        bitIndex = 0; // Reinicia el índice del bit
+        i2cState++;
+      }
+    break;
+
+    case 3: // Acknowledge Bit (no implementado aquí, pero puedes añadirlo si el dispositivo lo requiere)
+      // Configurar SDA como entrada para recibir el ACK, etc.
+      // Aquí se omite para simplificar
+      i2cState++;
+    break;
+
+    case 4: // Stop Condition
+      digitalWrite(SCL_PIN, LOW); // SCL bajo
+      delayMicroseconds(10); // Breve espera para estabilizar
+      digitalWrite(SDA_PIN, LOW); // SDA bajo mientras SCL está bajo
+      digitalWrite(SCL_PIN, HIGH); // SCL alto
+      delayMicroseconds(10); // Breve espera para estabilizar
+      digitalWrite(SDA_PIN, HIGH); // SDA alto para completar la condición de parada
+      i2cState = 0; // Reinicia el estado para la próxima transmisión
+      isTransmitting = false; // Marcar la transmisión como completada
+    break;
+   }
+  }
+ //fin de i2c a mano
+ */
+  subTimerCount++;
+  if (subTimerCount>TIMER_INTERVAL_MS){
+    subTimerCount=0;
+  //de la otra interrupcion
+  TimerCount++;
+  
+  //de la otra interrupcion
+
+  }
+  if (!isTransmitting) {
+  digitalWrite(D4,d4a);
+  digitalWrite(D5,d5a);
+  digitalWrite(D6,d6a);
+  digitalWrite(D7,d7a);
+  }
 }
 WiFiClient client;
 
-String result;
+//String result;
 
 int  counter = 60;
 
@@ -387,12 +647,7 @@ LiquidCrystal lcd(D8,D9,D4,D5,D6,D7);
 
 // put function definitions here:
 
-uint8_t tecla;
-uint8_t bufTecla;
-unsigned int RetardoTecla =8;
-unsigned long ContTecla=0;
-int prueba =100;
-unsigned long TiempoAhora = 0;
+
 
 
 void espera(int periodo) {
@@ -413,85 +668,9 @@ void displayhello()
   lcd.print(" LevelDispenser ");
 }
 
-void IRAM_ATTR onTimer(){
-  unsigned int Repetir;
-  uint8_t TeclaAux;// a global para probar
-	static uint8_t TeclaAnt;
-	//static unsigned long ContTecla=0;// a global para probar
-	static uint8_t Nueva;
-  uint8_t d4a;
-  uint8_t d5a;
-  uint8_t d6a;
-  uint8_t d7a;
-  Repetir = RetardoTecla/8;
-  //digitalRead(D2);
-
-  d4a = digitalRead(D4);
-  d5a = digitalRead(D5);
-  d6a = digitalRead(D6);
-  d7a = digitalRead(D7);
-  
-  
-  digitalWrite(D4,HIGH);
-  digitalWrite(D5,HIGH);
-  digitalWrite(D6,HIGH);
-  digitalWrite(D7,HIGH);
-  
- if(digitalRead(D2) == HIGH){
-    pinMode ( D4, INPUT_PULLUP);
-    pinMode ( D5, INPUT_PULLUP);
-    pinMode ( D6, INPUT_PULLUP);
-    pinMode ( D7, INPUT_PULLUP);
-    pinMode(D2, OUTPUT); 
-    digitalWrite(D2,LOW);
-        
-    TeclaAux=!digitalRead(D4)*1+!digitalRead(D5)*2+!digitalRead(D6)*4+!digitalRead(D7)*8;
-    //tecla=TeclaAux;
-}else TeclaAux=0;
-if(TeclaAnt==TeclaAux)
-{
-    if(ContTecla<(RetardoTecla+Repetir)){
-      ContTecla++;
-    }
-}
-else{
-    ContTecla = RetardoTecla+1;
-    Nueva=1;
-}
-TeclaAnt=TeclaAux;
-if(ContTecla==(RetardoTecla+Repetir)){
-  ContTecla = RetardoTecla;
-  
-}
-if(ContTecla==RetardoTecla)
-{
-  if ((TeclaAux=='*')||(TeclaAux=='#')){
-    if (Nueva==0) TeclaAux=0;
-  }
-  if (Nueva==1) {
-    ContTecla=0;
-    Nueva=0;
-  }
-  tecla=TeclaAux;
-  bufTecla=tecla;
-}else  tecla=0;
-pinMode(D2, INPUT_PULLDOWN_16); 
-pinMode ( D4, OUTPUT);
-pinMode ( D5, OUTPUT);
-pinMode ( D6, OUTPUT);
-pinMode ( D7, OUTPUT);
-digitalWrite(D4,d4a);
-digitalWrite(D5,d5a);
-digitalWrite(D6,d6a);
-digitalWrite(D7,d7a);
-
-
-
- }
-
 String outputState(){
   
-  if(estado=="0" || estado=="9"){
+  if(estado=='0' || estado=='9'){
     return "";
   }
   else {
@@ -517,21 +696,21 @@ String processor(const String& var){
     return timerSliderValue1;
   }
   else if(var == "STATECOLOR"){
-     if(estado=="0" || estado=="9")
+     if(estado=='0' || estado=='9')
      return "#9c9c9c";
     else 
       return "#00CED5";
   }
   else if(var == "ANGULO"){
-    if (estado == "3") 
+    if (estado == '3') 
     return "280";
-    else if(estado == "5") {
+    else if(estado == '5') {
       return "-450";
     } else return "-90";
     
   }
   else if(var == "MESTADO"){
-    return estado;
+    return String(estado);
   }
   return String();
 }
@@ -550,9 +729,13 @@ void setup() {
   //freq base = 80 MHZ -> 1us -> 80 ticks -> 104857.6 us maximo -> 0.1048576s maximo
   //Divisor 16 = freq base = 5 MHZ -> 1us -> 5 ticks -> 0.2 entre ticks -> 167721.6us maximo -> 1.6777216 s maximo
   //Divisor 256 = freq base = 31.25 Khz -> 3,2us -> 1 ticks -> 26843545.6 us maximo ->26.8 seg
+ //desactivar timer1
+ /*
   timer1_enable(TIM_DIV16, TIM_EDGE , TIM_LOOP);
   timer1_write(5000);//5000000 para un segundo 50000 andaba 10000
   timer1_attachInterrupt(onTimer);
+  */
+  //fin desactivar timer
   delay(10);
   WiFi.disconnect();
   delay(10);
@@ -615,7 +798,15 @@ else{
   }
   //WiFi.begin(ssid, password);
   int retries=0;
+  //cambiado para que ande el teclado desde el principio
   
+  if (ITimer.attachInterruptInterval((TIMER_INTERVAL_MS * 10000)-(50*182), TimerHandler))
+  {
+    Serial.print(F("Starting  ITimer OK, millis() = ")); Serial.println(millis());
+  }
+  else
+    Serial.println(F("Can't set ITimer. Select another freq. or timer"));
+// fin del cambio 
  
   while (WiFi.status() != WL_CONNECTED) {
 
@@ -632,9 +823,12 @@ else{
     Serial.println(retries);
     Serial.println("Estado teclado");
     Serial.println(tecla);
-    
-    if (bufTecla == 4 ) {prueba--; bufTecla =0;}
-    if (bufTecla == 8 ) {prueba++; bufTecla =0;}
+     lcd.setCursor(15,1);
+    tbufTecla=bufTecla;
+    lcd.print(tbufTecla); 
+
+    if (bufTecla == 4 ) {prueba--; bufTecla =255;}
+    if (bufTecla == 8 ) {prueba++; bufTecla =255;}
   
     Serial.println(ContTecla);
     Serial.println(" ---- ");
@@ -659,15 +853,17 @@ else{
    lcd.print("  Comenzando.   ");
    lcd.setCursor(0,1);
    lcd.print("                ");  
-
-if (ITimer.attachInterruptInterval(TIMER_INTERVAL_MS * 1000, TimerHandler))
+//anular este timer porque anula al otro
+//@@@
+/*
+if (ITimer.attachInterruptInterval((TIMER_INTERVAL_MS * 10000)-(50*182), TimerHandler))
   {
     Serial.print(F("Starting  ITimer OK, millis() = ")); Serial.println(millis());
   }
   else
     Serial.println(F("Can't set ITimer. Select another freq. or timer"));
-  
 
+*/
 
    // Route for root / web page
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -681,11 +877,11 @@ if (ITimer.attachInterruptInterval(TIMER_INTERVAL_MS * 1000, TimerHandler))
       inputMessage = request->getParam(PARAM_INPUT_1)->value();
      // digitalWrite(output,inputMessage.toInt());
       Serial.printf("\n%s=",PARAM_INPUT_1); Serial.print(inputMessage); 
-      estado = inputMessage;
-      if (estado=="0"){
+      estado = inputMessage.charAt(0);
+      if (estado=='0'){
         config.estadog=0;
-        digitalWrite(output,HIGH);
-        digitalWrite(output1,HIGH);
+        //digitalWrite(output,HIGH);
+       // digitalWrite(output1,HIGH);
         eepromsave();
       }
     }
@@ -731,10 +927,18 @@ if (ITimer.attachInterruptInterval(TIMER_INTERVAL_MS * 1000, TimerHandler))
 
   eepromload();
 
-   estado = String(config.estadog);
+   //estado = String(config.estadog);
+  // estado = char(config.estadog);
+   if (config.estadog==1) estado = '1';
    timerSliderValue = String( config.Tmarchag);
    timerSliderValue1 = String( config.Tpausag);
-
+  Wire.begin();
+  Wire.beginTransmission(PCF8574_ADDRESS); // Inicia la transmisión a la dirección del PCF8574
+  Wire.write(data); // Envía el byte de datos
+  Wire.endTransmission(); // Finaliza la transmisión
+  delayMicroseconds(10); 
+  //Pin SLC i2c
+   //pinMode ( D3, OUTPUT);
 }
 /*
 void Parametros(){
@@ -904,31 +1108,75 @@ char Eleccion(char Titulo,char ItemT,char Items,char Tipo){
 */
 void loop() {
   //web
-  static uint32_t lastTime = 0;
-  static uint32_t lastTimedisplay = 0;
-  static uint32_t lastChangeTime = 0;
-  static uint32_t currTime;
-  static uint32_t multFactor = 0;
+   uint8_t d4temp;
+  
+  //static uint32_t lastChangeTime = 0;
+  //static uint32_t currTime;
+  //static uint32_t multFactor = 0;
   static uint16_t tiempo_de_pausa=1; //en segundos
   static uint16_t tiempo_de_marcha=10;
   volatile static uint8_t marcha=0;
   volatile static uint8_t contramarcha=0;
   static uint32_t ftime = 0;
+  
+  // a global uint8_t tbufTecla = 0;
   String sftime="0";
-  currTime = millis();
-   if (estado == "0") //Empieza con la pausa
+  //currTime = millis();
+
+  //Agregado para descubrir i2c
+  /*
+  byte error, address;
+  int nDevices;
+
+  Serial.println("Scanning...");
+
+  nDevices = 0;
+  for(address = 1; address < 127; address++ ) 
+  {
+
+    Wire.beginTransmission(address);
+    error = Wire.endTransmission();
+
+    if (error == 0)
+    {
+      Serial.print("I2C device found at address 0x");
+      if (address<16) 
+        Serial.print("0");
+      Serial.print(address,HEX);
+      Serial.println("  !");
+
+      nDevices++;
+    }
+    else if (error==4) 
+    {
+      Serial.print("Unknow error at address 0x");
+      if (address<16) 
+        Serial.print("0");
+      Serial.println(address,HEX);
+    }    
+  }
+  if (nDevices == 0)
+    Serial.println("No I2C devices found\n");
+  else
+    Serial.println("done\n");
+    */ 
+  //fin de Agregado para descubrir i2c
+    
+   if (estado == '0') //Empieza con la pausa
   { 
+    subTimerCount=0;
     TimerCount=0;
     marcha=0;
     contramarcha=0;
     lastTime = TimerCount;
     events.send("1","mestado",millis());
-    estado="9";
+    estado='9';
   }
 
-  if (estado == "1") //Empieza con la pausa
+  if (estado == '1') //Empieza con la pausa
   { 
-    estado="2";
+   
+    subTimerCount=0;
     TimerCount=0;
     marcha=0;
     contramarcha=0;
@@ -955,81 +1203,122 @@ void loop() {
       config.Tpausag=tiempo_de_pausa;
       config.estadog=1;
       eepromsave();
-      events.send(estado.c_str(),"mestado",millis());
+      //events.send(String(estado).c_str(),"mestado",millis());
+      events.send("2","mestado",millis());
+      estado='2';
   }
 
-  if (estado == "2") //Pausa Esperando para marcha
+  if (estado == '2') //Pausa Esperando para marcha
   { 
       
-    if (TimerCount - lastTime > tiempo_de_pausa)
+    if (TimerCount - lastTime > tiempo_de_pausa-1)
     { 
       lastTime = TimerCount;
-      estado="3";
-      digitalWrite(output,LOW);
+      
+      //digitalWrite(output,LOW);
       marcha=1;
-      events.send(estado.c_str(),"mestado",millis());
+      //events.send(estado.c_str(),"mestado",millis());
+      //events.send(String(estado).c_str(),"mestado",millis());
+      events.send("3","mestado",millis());
+      estado='3';
     }
   }    
-  if (estado == "3") //Marcha Esperando para pausa
+  if (estado == '3') //Marcha Esperando para pausa
   { 
-    if (TimerCount - lastTime > tiempo_de_marcha)
+    if (TimerCount - lastTime > tiempo_de_marcha-1)
     { 
       lastTime = TimerCount;
-      estado="4";
-      marcha=0;
-      digitalWrite(output,HIGH);
-      digitalWrite(output1,HIGH);
-      contramarcha=0;
-      events.send(estado.c_str(),"mestado",millis());
-    }
-  }    
-  if (estado == "4") //Parado Esperando para contramarcha
-  { 
-    if (TimerCount - lastTime > tiempo_de_pausa)
-    { 
-      lastTime = TimerCount;
-      estado="5";
-      contramarcha=1;
-      digitalWrite(output1,LOW);
-      events.send(estado.c_str(),"mestado",millis());
-    }
-  }    
-  if (estado == "5") //Contramarcha Esperando para pausa
-  { 
-    if (TimerCount - lastTime > tiempo_de_marcha)
-    { 
-      lastTime = TimerCount;
-      estado="2";
-      contramarcha=0;
-      digitalWrite(output1,HIGH);
-      events.send(estado.c_str(),"mestado",millis());
-    }
-  }    
-  if (TimerCount - lastTimedisplay > 1)
-  {
-   lastTimedisplay=TimerCount;
-   if ((estado=="5")||(estado=="3")){
-     ftime= tiempo_de_marcha-(TimerCount-lastTime);
-   } else if ((estado=="2")||(estado=="4")){
-     ftime= tiempo_de_pausa-(TimerCount-lastTime);
-   } else {ftime=0;}
-   if (ftime>tiempo_de_marcha) ftime=tiempo_de_marcha;
-  sftime=String(ftime);
-      events.send(sftime.c_str(),"muestratiempo",millis());
       
+      marcha=0;
+      //digitalWrite(output,HIGH);
+      //digitalWrite(output1,HIGH);
+      contramarcha=0;
+      //events.send(String(estado).c_str(),"mestado",millis());
+      events.send("4","mestado",millis());
+      estado='4';
+    }
+  }    
+  if (estado == '4') //Parado Esperando para contramarcha
+  { 
+    if (TimerCount - lastTime > tiempo_de_pausa-1)
+    { 
+      lastTime = TimerCount;
+      estado='5';
+      contramarcha=1;
+      //digitalWrite(output1,LOW);
+      //events.send(String(estado).c_str(),"mestado",millis());
+      events.send("5","mestado",millis());
+    }
+  }    
+  if (estado == '5') //Contramarcha Esperando para pausa
+  { 
+    if (TimerCount - lastTime > tiempo_de_marcha-1)
+    { 
+      lastTime = TimerCount;
+      estado='2';
+      contramarcha=0;
+      //digitalWrite(output1,HIGH);
+      //events.send(String(estado).c_str(),"mestado",millis());
+      events.send("2","mestado",millis());
+    }
+  }    
+  if (TimerCount - lastTimedisplay > 0)
+  {
+     
+    lastTimedisplay=TimerCount;
+    if ((estado=='5')||(estado=='3')){
+      ftime= tiempo_de_marcha-(TimerCount-lastTime);
+    } else if ((estado=='2')||(estado=='4')){
+      ftime= tiempo_de_pausa-(TimerCount-lastTime);
+    } else {ftime=0;}
+    //if (ftime>tiempo_de_marcha) ftime=tiempo_de_marcha;
+    sftime=String(ftime);
+    events.send(sftime.c_str(),"muestratiempo",millis());
+        
     Serial.print(F("\n")); Serial.print(TimerCount-lastTime); 
-     Serial.print(F("/")); Serial.print(lastTime); 
-     Serial.print(F("/")); Serial.print(TimerCount); 
-    Serial.print(F(" Est ")); Serial.print(estado); 
+    Serial.print(F("/")); Serial.print(lastTime); 
+    Serial.print(F("/")); Serial.print(TimerCount); 
+    Serial.print(F("/")); Serial.print(millis()); 
+    
+    Serial.print(F(" Est ")); Serial.print(char(estado)); 
       
     if (contramarcha==1) Serial.print(F(" <- "));
-    else Serial.print(F("    "));
+    else Serial.print(F("    ")); 
     if (marcha==1) Serial.print(F("->"));
     else Serial.print(F("  "));
+    sensorValue = analogRead(A0);
+    Serial.print(F("/"));
+    Serial.println(sensorValue);
+    
+    Serial.print(F("/")); 
+    Serial.print(bitRead(data, 7));
+    Serial.print(bitRead(data, 6));
+    Serial.print(bitRead(data, 5));
+    Serial.print(bitRead(data, 4));
+    Serial.print(bitRead(data, 3));
+    Serial.print(bitRead(data, 2));
+    Serial.print(bitRead(data, 1));
+    Serial.print(bitRead(data, 0)); 
+  
+    lcd.setCursor(4,1);
+    lcd.print(data); 
+    lcd.setCursor(8,1);
+    lcd.print(bitRead(data, 7)); 
+    lcd.print(bitRead(data, 6)); 
+    lcd.print(bitRead(data, 5)); 
+    lcd.print(bitRead(data, 4)); 
+    lcd.print(bitRead(data, 3)); 
+    lcd.print(bitRead(data, 2)); 
+    lcd.print(bitRead(data, 1)); 
+    lcd.print(bitRead(data, 0)); 
+
+    
+    lcd.setCursor(13,0);
+    lcd.print(prueba); 
     
   }
   
-
+//*/
   //finweb
    if(counter == 60) //Get new data every 10 minutes
     {
@@ -1049,11 +1338,34 @@ void loop() {
       
     
     }
-    espera(prueba);
-    if (bufTecla == 4 ) {prueba--; bufTecla =0;}
-    if (bufTecla == 8 ) {prueba++; bufTecla =0;}
-    lcd.setCursor(8,1);
-      lcd.print(prueba); 
+    //espera(prueba);
+    //puesto antes de interpretar la tecla para que si es 0 haga esto
+    if (((bufTecla == 0)&&(antdata!=data))&&(!isTransmitting)) {
+      d4temp = digitalRead(D4);
+      digitalWrite(D4,LOW);
+      Serial.print(F("/Transmitiensdo i2c"));
+      isTransmitting = true;
+           
+      Wire.begin();
+      Wire.beginTransmission(PCF8574_ADDRESS); // Inicia la transmisión a la dirección del PCF8574
+      Wire.write(data); // Envía el byte de datos
+      Wire.endTransmission(); // Finaliza la transmisión
+      delayMicroseconds(10); 
+      
+      antdata = data;
+      isTransmitting = false;
+      pinMode ( D4, OUTPUT);
+      digitalWrite(D4,d4temp);
+
+    }
+    tbufTecla=bufTecla;
+    
+    if (bufTecla == 4 ) {prueba--;  bufTecla = 255;}
+    if (bufTecla == 8 ) {prueba++;  bufTecla = 255;}
+    if (bufTecla == 1 ) {data--;  bufTecla = 255;}
+    if (bufTecla == 2 ) {data++;  bufTecla = 255;}
+    
+    
    
  
 
